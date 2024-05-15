@@ -5,6 +5,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"log"
 	"pwa/internal/models"
 )
 
@@ -56,7 +57,7 @@ func (r *WebPushRepository) FindByUserID(ctx context.Context, userID primitive.O
 	defer func(cursor *mongo.Cursor, ctx context.Context) {
 		err := cursor.Close(ctx)
 		if err != nil {
-
+			log.Printf("Error closing cursor: %v", err)
 		}
 	}(cursor, ctx)
 

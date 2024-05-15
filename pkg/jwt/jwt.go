@@ -7,19 +7,27 @@ import (
 	"time"
 )
 
-func GenerateToken(userID string) (string, error) {
+func getSigningKey() ([]byte, error) {
 	var mySigningKey = []byte(os.Getenv("JWT_SECRET"))
 	if len(mySigningKey) == 0 {
-		return "", fmt.Errorf("JWT secret key not set")
+		return nil, fmt.Errorf("JWT secret key not set")
+	}
+	return mySigningKey, nil
+}
+
+func GenerateToken(userID string) (string, error) {
+	mySigningKey, err := getSigningKey()
+	if err != nil {
+		return "", err
 	}
 
-	token := jwt.New(jwt.SigningMethodHS256)
-	claims := token.Claims.(jwt.MapClaims)
+	claims := &jwt.RegisteredClaims{
+		Subject:   userID,
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(72 * time.Hour)),
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+	}
 
-	claims["authorized"] = true
-	claims["user_id"] = userID
-	claims["exp"] = time.Now().Add(time.Hour * 72).Unix()
-
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString(mySigningKey)
 	if err != nil {
 		return "", err
@@ -29,27 +37,24 @@ func GenerateToken(userID string) (string, error) {
 }
 
 func ValidateToken(tokenString string) (string, error) {
-	var mySigningKey = []byte(os.Getenv("JWT_SECRET"))
-	if len(mySigningKey) == 0 {
-		return "", fmt.Errorf("JWT secret key not set")
+	mySigningKey, err := getSigningKey()
+	if err != nil {
+		return "", err
 	}
 
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Method.Alg())
+		}
 		return mySigningKey, nil
 	})
 	if err != nil {
 		return "", err
 	}
 
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok || !token.Valid {
-		return "", fmt.Errorf("invalid token")
+	if claims, ok := token.Claims.(*jwt.RegisteredClaims); ok && token.Valid {
+		return claims.Subject, nil
+	} else {
+		return "", fmt.Errorf("invalid or expired token")
 	}
-
-	userID, ok := claims["user_id"].(string)
-	if !ok {
-		return "", fmt.Errorf("user_id not found in token")
-	}
-
-	return userID, nil
 }

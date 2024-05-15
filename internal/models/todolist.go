@@ -9,7 +9,7 @@ type Task struct {
 	ID          primitive.ObjectID `bson:"_id" json:"id"`
 	Title       string             `bson:"title" json:"title"`
 	Description string             `bson:"description,omitempty" json:"description,omitempty"`
-	Status      string             `bson:"status" json:"status"`
+	Completed   bool               `bson:"completed" json:"completed"`
 	CreatedAt   time.Time          `bson:"createdAt" json:"createdAt"`
 	UpdatedAt   time.Time          `bson:"updatedAt" json:"updatedAt"`
 	UpdatedBy   primitive.ObjectID `bson:"updatedBy" json:"updatedBy"`

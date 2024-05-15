@@ -16,16 +16,6 @@ type ChannelHandler struct {
 	Repo *repository.ChannelRepository
 }
 
-// CreateChannel godoc
-// @Summary Create a new channel
-// @Description Adds a new channel to the system with the provided information.
-// @Tags channels
-// @Accept json
-// @Produce json
-// @Success 201 {object} object "Successful creation with new channel ID" {id string}
-// @Failure 400 {object} ErrorResponse "Bad request when the JSON data is invalid"
-// @Failure 500 {object} ErrorResponse "Internal Server Error"
-// @Router /channels [post]
 func (h *ChannelHandler) CreateChannel(c *gin.Context) {
 	var newChannel models.Channel
 	if err := c.ShouldBindJSON(&newChannel); err != nil {
@@ -45,16 +35,6 @@ func (h *ChannelHandler) CreateChannel(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"id": result.InsertedID})
 }
 
-// GetChannel godoc
-// @Summary Get a channel by ID
-// @Description Retrieves a channel by its unique identifier.
-// @Tags channels
-// @Accept json
-// @Produce json
-// @Param id path string true "Channel ID"
-// @Success 200 {object} Channel
-// @Failure 404 {object} ErrorResponse "Channel not found"
-// @Router /channels/{id} [get]
 func (h *ChannelHandler) GetChannel(c *gin.Context) {
 	id := c.Param("id")
 	channel, err := h.Repo.FindChannelByID(c, id)
@@ -66,16 +46,6 @@ func (h *ChannelHandler) GetChannel(c *gin.Context) {
 	c.JSON(http.StatusOK, channel)
 }
 
-// GetChannelsByUserID godoc
-// @Summary Get all channels for a user
-// @Description Retrieves a list of all channels that a user is a member of.
-// @Tags channels
-// @Accept json
-// @Produce json
-// @Param id path string true "User ID"
-// @Success 200 {array} Channel
-// @Failure 404 {object} ErrorResponse "Channels not found"
-// @Router /users/{id}/channels [get]
 func (h *ChannelHandler) GetChannelsByUserID(c *gin.Context) {
 	userID := c.Param("id")
 	channels, err := h.Repo.FindChannelsByUserID(c, userID)
@@ -87,18 +57,6 @@ func (h *ChannelHandler) GetChannelsByUserID(c *gin.Context) {
 	c.JSON(http.StatusOK, channels)
 }
 
-// UpdateChannel godoc
-// @Summary Update a channel
-// @Description Updates a channel with the provided information.
-// @Tags channels
-// @Accept json
-// @Produce json
-// @Param id path string true "Channel ID"
-// @Param channel body Channel true "Channel update data"
-// @Success 200 {object} Channel
-// @Failure 400 {object} ErrorResponse "Bad request when the JSON data is invalid"
-// @Failure 500 {object} ErrorResponse "Internal Server Error"
-// @Router /channels/{id} [put]
 func (h *ChannelHandler) UpdateChannel(c *gin.Context) {
 	id := c.Param("id")
 	var channel models.Channel
@@ -117,16 +75,6 @@ func (h *ChannelHandler) UpdateChannel(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-// DeleteChannel godoc
-// @Summary Delete a channel
-// @Description Removes a channel from the system.
-// @Tags channels
-// @Accept json
-// @Produce json
-// @Param id path string true "Channel ID"
-// @Success 200 {object} DeleteResponse
-// @Failure 500 {object} ErrorResponse "Internal Server Error"
-// @Router /channels/{id} [delete]
 func (h *ChannelHandler) DeleteChannel(c *gin.Context) {
 	id := c.Param("id")
 	result, err := h.Repo.DeleteChannel(c, id)
@@ -136,4 +84,44 @@ func (h *ChannelHandler) DeleteChannel(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result)
+}
+
+func (h *ChannelHandler) JoinChannel(c *gin.Context) {
+	var request struct {
+		Password string `json:"password"`
+	}
+	if err := c.BindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Bad request"})
+		return
+	}
+
+	userID := c.GetString("userID")
+	channelID := c.Param("id")
+
+	ok, err := h.Repo.CheckChannelPassword(c, channelID, request.Password)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify channel password", "details": err.Error()})
+		return
+	}
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid channel password"})
+		return
+	}
+
+	if err := h.Repo.JoinChannel(c, channelID, userID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to join channel", "details": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Successfully joined channel"})
+}
+
+func (h *ChannelHandler) LeaveChannel(c *gin.Context) {
+	userID := c.GetString("userID")
+	channelID := c.Param("id")
+
+	if err := h.Repo.LeaveChannel(c, channelID, userID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to leave channel", "details": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Successfully left channel"})
 }

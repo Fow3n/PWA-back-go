@@ -7,6 +7,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"golang.org/x/crypto/bcrypt"
 	"pwa/internal/models"
 )
 
@@ -15,6 +16,14 @@ type ChannelRepository struct {
 }
 
 func (r *ChannelRepository) CreateChannel(ctx context.Context, channel models.Channel) (*mongo.InsertOneResult, error) {
+	if channel.Password != "" {
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(channel.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return nil, err
+		}
+		channel.Password = string(hashedPassword)
+	}
+
 	return r.Collection.InsertOne(ctx, channel)
 }
 
@@ -28,7 +37,7 @@ func (r *ChannelRepository) FindChannelsByUserID(ctx context.Context, userID str
 	defer func(cursor *mongo.Cursor, ctx context.Context) {
 		err := cursor.Close(ctx)
 		if err != nil {
-			// log this error
+			fmt.Println(err)
 		}
 	}(cursor, ctx)
 
@@ -84,4 +93,41 @@ func (r *ChannelRepository) GetChannelMembers(ctx context.Context, channelID str
 		return nil, err
 	}
 	return channel.Members, nil
+}
+
+func (r *ChannelRepository) CheckChannelPassword(ctx context.Context, channelID, password string) (bool, error) {
+	cid, err := primitive.ObjectIDFromHex(channelID)
+	if err != nil {
+		return false, err
+	}
+	var channel struct {
+		Password string `bson:"password"`
+	}
+	if err := r.Collection.FindOne(ctx, bson.M{"_id": cid}).Decode(&channel); err != nil {
+		return false, err
+	}
+
+	return bcrypt.CompareHashAndPassword([]byte(channel.Password), []byte(password)) == nil, nil
+}
+
+func (r *ChannelRepository) JoinChannel(ctx context.Context, channelID, userID string) error {
+	cid, err := primitive.ObjectIDFromHex(channelID)
+	if err != nil {
+		return err
+	}
+	filter := bson.M{"_id": cid}
+	update := bson.M{"$addToSet": bson.M{"members": userID}}
+	_, err = r.Collection.UpdateOne(ctx, filter, update)
+	return err
+}
+
+func (r *ChannelRepository) LeaveChannel(ctx context.Context, channelID, userID string) error {
+	cid, err := primitive.ObjectIDFromHex(channelID)
+	if err != nil {
+		return err
+	}
+	filter := bson.M{"_id": cid}
+	update := bson.M{"$pull": bson.M{"members": userID}}
+	_, err = r.Collection.UpdateOne(ctx, filter, update)
+	return err
 }

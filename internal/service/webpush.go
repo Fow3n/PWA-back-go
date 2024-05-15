@@ -16,12 +16,14 @@ type WebPushService struct {
 	repo            *repository.WebPushRepository
 	vapidPublicKey  string
 	vapidPrivateKey string
-	channelRepo     *repository.ChannelRepository // To access channel member data
+	vapidContact    string
+	channelRepo     *repository.ChannelRepository
 }
 
 func NewWebPushService(repo *repository.WebPushRepository, channelRepo *repository.ChannelRepository) *WebPushService {
 	vapidPublicKey := os.Getenv("VAPID_PUBLIC_KEY")
 	vapidPrivateKey := os.Getenv("VAPID_PRIVATE_KEY")
+	vapidContact := os.Getenv("VAPID_CONTACT")
 
 	if vapidPublicKey == "" || vapidPrivateKey == "" {
 		log.Fatal("VAPID keys must be set in the environment")
@@ -32,6 +34,7 @@ func NewWebPushService(repo *repository.WebPushRepository, channelRepo *reposito
 		channelRepo:     channelRepo,
 		vapidPublicKey:  vapidPublicKey,
 		vapidPrivateKey: vapidPrivateKey,
+		vapidContact:    vapidContact,
 	}
 }
 
@@ -77,6 +80,7 @@ func (s *WebPushService) NotifyChannelMembers(ctx context.Context, channelID str
 }
 
 func (s *WebPushService) sendNotifications(ctx context.Context, subscriptions []models.WebPushSubscription, message string) error {
+	var allErrors error
 	for _, sub := range subscriptions {
 		_, err := webpush.SendNotification([]byte(message), &webpush.Subscription{
 			Endpoint: sub.Endpoint,
@@ -85,15 +89,14 @@ func (s *WebPushService) sendNotifications(ctx context.Context, subscriptions []
 				Auth:   sub.Keys["auth"],
 			},
 		}, &webpush.Options{
-			Subscriber:      "mailto:your-email@example.com",
+			Subscriber:      s.vapidContact,
 			VAPIDPublicKey:  s.vapidPublicKey,
 			VAPIDPrivateKey: s.vapidPrivateKey,
 			TTL:             30,
 		})
 		if err != nil {
-			fmt.Println(err)
-			return err
+			allErrors = multierror.Append(allErrors, err)
 		}
 	}
-	return nil
+	return allErrors
 }
